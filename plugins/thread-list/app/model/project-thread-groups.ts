@@ -438,6 +438,32 @@ export function buildSectionThreadList(
   );
 }
 
+export function findSectionComposeProjectId(
+  threads: readonly SidebarThread[],
+  sectionId: string,
+  compareThreads: ThreadComparator,
+  groupEnvironmentThreads: boolean,
+  pinnedThreadIds: ReadonlySet<string>,
+): string | null {
+  const candidates = threads.filter(
+    (thread) => !thread.isArchived && !pinnedThreadIds.has(thread.id),
+  );
+  const rootItems = buildSectionThreadList(
+    candidates,
+    compareThreads,
+    [{ id: sectionId, name: sectionId }],
+    groupEnvironmentThreads,
+  );
+  for (const item of rootItems) {
+    if (item.kind !== "section" || item.group.id !== sectionId) continue;
+    const topItem = item.group.items[0];
+    return topItem === undefined
+      ? null
+      : representativeThread(topItem).projectId;
+  }
+  return null;
+}
+
 export function isSidebarProjectThread(
   thread: SidebarProjectThreadShape,
 ): boolean {

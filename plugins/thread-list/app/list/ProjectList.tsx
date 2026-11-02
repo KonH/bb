@@ -70,6 +70,7 @@ import {
   compareByCreatedAtDescending,
   compareStandardThreads,
   createSidebarProjectIdResolver,
+  findSectionComposeProjectId,
   isSidebarProjectThread,
   type ProjectThreadItem,
   type SidebarSectionDefinition,
@@ -1382,12 +1383,6 @@ function ProjectListComponent({
   const handleCreateProjectlessThread = useCallback(() => {
     openRootComposeForProject(personalProjectId);
   }, [openRootComposeForProject, personalProjectId]);
-  const handleCreateThreadInSection = useCallback(
-    (sectionId: string) => {
-      openRootComposeForProject(null, sectionId);
-    },
-    [openRootComposeForProject],
-  );
   const [isSectionCreateDialogOpen, setIsSectionCreateDialogOpen] =
     useState(false);
   const [sectionCreateErrorMessage, setSectionCreateErrorMessage] = useState<
@@ -1604,6 +1599,28 @@ function ProjectListComponent({
         threads,
       }),
     [groupThreadsByEnvironment, threads],
+  );
+  const effectivePinnedThreadIds = pinnedSidebarState.effectivePinnedThreadIds;
+  const handleCreateThreadInSection = useCallback(
+    (sectionId: string) => {
+      openRootComposeForProject(
+        findSectionComposeProjectId(
+          threads,
+          sectionId,
+          sidebarThreadComparator,
+          groupThreadsByEnvironment,
+          effectivePinnedThreadIds,
+        ),
+        sectionId,
+      );
+    },
+    [
+      effectivePinnedThreadIds,
+      groupThreadsByEnvironment,
+      openRootComposeForProject,
+      sidebarThreadComparator,
+      threads,
+    ],
   );
   const pinnedRootThreads = useMemo(
     () => pinnedSidebarState.rootNodes.map((node) => node.thread),

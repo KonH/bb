@@ -5,6 +5,7 @@ import {
   compareByCreatedAtDescending,
   compareStandardThreads,
   createSidebarProjectIdResolver,
+  findSectionComposeProjectId,
   resolveSidebarProjectId,
   type ProjectThreadItem,
   type ProjectThreadNode,
@@ -956,5 +957,217 @@ describe("resolveSidebarProjectId", () => {
       "thr_child",
       "thr_child",
     ]);
+  });
+});
+
+describe("findSectionComposeProjectId", () => {
+  const noPinned: ReadonlySet<string> = new Set();
+
+  function find(
+    threads: SidebarThread[],
+    compareThreads: ThreadComparator = compareStandardThreads,
+    pinnedThreadIds: ReadonlySet<string> = noPinned,
+    sectionId = "sec_a",
+  ) {
+    return findSectionComposeProjectId(
+      threads,
+      sectionId,
+      compareThreads,
+      false,
+      pinnedThreadIds,
+    );
+  }
+
+  it("returns the project of the top row in the section", () => {
+    expect(
+      find([
+        createThread({
+          id: "low",
+          projectId: "proj_low",
+          sectionId: "sec_a",
+          latestAttentionAt: 5,
+        }),
+        createThread({
+          id: "high",
+          projectId: "proj_high",
+          sectionId: "sec_a",
+          latestAttentionAt: 9,
+        }),
+      ]),
+    ).toBe("proj_high");
+  });
+
+  it("ignores hidden threads", () => {
+    expect(
+      find([
+        createThread({
+          id: "visible",
+          projectId: "proj_visible",
+          sectionId: "sec_a",
+          latestAttentionAt: 5,
+        }),
+        createThread({
+          id: "hidden",
+          projectId: "proj_hidden",
+          sectionId: "sec_a",
+          latestAttentionAt: 9,
+          isHidden: true,
+        }),
+      ]),
+    ).toBe("proj_visible");
+  });
+
+  it("ignores archived threads", () => {
+    expect(
+      find([
+        createThread({
+          id: "live",
+          projectId: "proj_live",
+          sectionId: "sec_a",
+          latestAttentionAt: 5,
+        }),
+        createThread({
+          id: "archived",
+          projectId: "proj_archived",
+          sectionId: "sec_a",
+          latestAttentionAt: 9,
+          archivedAt: 3,
+        }),
+      ]),
+    ).toBe("proj_live");
+  });
+
+  it("ignores pinned threads", () => {
+    expect(
+      find(
+        [
+          createThread({
+            id: "unpinned",
+            projectId: "proj_unpinned",
+            sectionId: "sec_a",
+            latestAttentionAt: 5,
+          }),
+          createThread({
+            id: "pinned",
+            projectId: "proj_pinned",
+            sectionId: "sec_a",
+            latestAttentionAt: 9,
+            pinnedAt: 1,
+          }),
+        ],
+        compareStandardThreads,
+        new Set(["pinned"]),
+      ),
+    ).toBe("proj_unpinned");
+  });
+
+  it("ignores threads of other sections", () => {
+    expect(
+      find([
+        createThread({
+          id: "other",
+          projectId: "proj_other",
+          sectionId: "sec_b",
+        }),
+        createThread({ id: "loose", projectId: "proj_loose" }),
+      ]),
+    ).toBeNull();
+  });
+
+  it("returns null for an empty section and when nothing is eligible", () => {
+    expect(find([])).toBeNull();
+    expect(
+      find(
+        [
+          createThread({ id: "hidden", sectionId: "sec_a", isHidden: true }),
+          createThread({ id: "archived", sectionId: "sec_a", archivedAt: 1 }),
+          createThread({ id: "pinned", sectionId: "sec_a", pinnedAt: 1 }),
+        ],
+        compareStandardThreads,
+        new Set(["pinned"]),
+      ),
+    ).toBeNull();
+  });
+
+  it("files a thread under its root's section and project", () => {
+    expect(
+      find([
+        createThread({
+          id: "root",
+          projectId: "proj_root",
+          sectionId: "sec_a",
+          latestAttentionAt: 1,
+        }),
+        createThread({
+          id: "child",
+          projectId: "proj_child",
+          parentThreadId: "root",
+          sectionId: "sec_a",
+          latestAttentionAt: 9,
+        }),
+      ]),
+    ).toBe("proj_root");
+    expect(
+      find([
+        createThread({
+          id: "root",
+          projectId: "proj_root",
+          sectionId: "sec_b",
+        }),
+        createThread({
+          id: "child",
+          projectId: "proj_child",
+          parentThreadId: "root",
+          sectionId: "sec_a",
+          latestAttentionAt: 9,
+        }),
+      ]),
+    ).toBeNull();
+  });
+
+  it("breaks ties by the comparator's id order", () => {
+    expect(
+      find([
+        createThread({ id: "b", projectId: "proj_b", sectionId: "sec_a" }),
+        createThread({ id: "a", projectId: "proj_a", sectionId: "sec_a" }),
+      ]),
+    ).toBe("proj_a");
+  });
+
+  it("follows the active sort mode", () => {
+    const threads = [
+      createThread({
+        id: "attention",
+        title: "Alpha",
+        projectId: "proj_attention",
+        sectionId: "sec_a",
+        createdAt: 1,
+        latestAttentionAt: 9,
+      }),
+      createThread({
+        id: "created",
+        title: "Zulu",
+        projectId: "proj_created",
+        sectionId: "sec_a",
+        createdAt: 5,
+        latestAttentionAt: 2,
+      }),
+      createThread({
+        id: "running",
+        title: "Mike",
+        projectId: "proj_running",
+        sectionId: "sec_a",
+        createdAt: 3,
+        latestAttentionAt: 1,
+        status: "active",
+      }),
+    ];
+
+    expect(find(threads, compareStandardThreads)).toBe("proj_running");
+    expect(find(threads, compareByCreatedAtDescending)).toBe("proj_created");
+    expect(find(threads, compareAlphaDescending)).toBe("proj_created");
+    expect(find(threads.slice(0, 2), compareStandardThreads)).toBe(
+      "proj_attention",
+    );
   });
 });

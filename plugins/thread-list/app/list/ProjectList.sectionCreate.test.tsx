@@ -48,7 +48,10 @@ function makeSection(id: string, name: string) {
   return { id, name, createdAt: 1, updatedAt: 1 };
 }
 
-function renderCustomSections(pinned = false) {
+function renderCustomSections(
+  pinned = false,
+  extraThreads: ReturnType<typeof makeSidebarThread>[] = [],
+) {
   const store = createStore();
   store.set(preferencesReadyAtom(), true);
   store.set(sidebarOrganizationModeAtom, "chronological");
@@ -63,9 +66,11 @@ function renderCustomSections(pinned = false) {
             sectionId: "sec_a",
             pinnedAt: pinned ? 1 : null,
           }),
+          ...extraThreads,
         ],
         projects: [
           makePluginProject(),
+          makePluginProject({ id: "proj_other", name: "Other" }),
           makePluginProject({
             id: "proj_personal",
             name: "Personal",
@@ -113,22 +118,90 @@ describe("creating a sidebar section", () => {
     });
   });
 
-  it("keeps the composer project when starting a thread in a section", async () => {
+  it("keeps the composer project when starting a thread in an empty section", async () => {
     const { inspection } = renderCustomSections();
     fireEvent.click(
       await screen.findByRole("button", {
-        name: "New thread in Alpha section",
+        name: "New thread in Beta section",
       }),
     );
 
     expect(inspection.navigateCalls).toContainEqual({
       method: "toCompose",
       options: {
-        placement: { sectionId: "sec_a", pinned: false },
+        placement: { sectionId: "sec_b", pinned: false },
         focusPrompt: true,
       },
     });
   });
+
+  it("opens the composer on the project of the top visible thread in the section", async () => {
+    const { inspection } = renderCustomSections(false, [
+      makeSidebarThread({
+        id: "thr_old",
+        sectionId: "sec_b",
+        projectId: "proj_test",
+        latestAttentionAt: 10,
+      }),
+      makeSidebarThread({
+        id: "thr_new",
+        sectionId: "sec_b",
+        projectId: "proj_other",
+        latestAttentionAt: 20,
+      }),
+      makeSidebarThread({
+        id: "thr_archived",
+        sectionId: "sec_b",
+        projectId: "proj_test",
+        latestAttentionAt: 30,
+        archivedAt: 5,
+      }),
+    ]);
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "New thread in Beta section",
+      }),
+    );
+
+    expect(inspection.navigateCalls).toContainEqual({
+      method: "toCompose",
+      options: {
+        projectId: "proj_other",
+        placement: { sectionId: "sec_b", pinned: false },
+        focusPrompt: true,
+      },
+    });
+  });
+
+  it.each([
+    ["hidden", { isHidden: true }],
+    ["pinned", { pinnedAt: 1 }],
+  ])(
+    "ignores %s threads when picking the section project",
+    async (_label, overrides) => {
+      const { inspection } = renderCustomSections(false, [
+        makeSidebarThread({
+          id: "thr_ignored",
+          sectionId: "sec_b",
+          projectId: "proj_other",
+          ...overrides,
+        }),
+      ]);
+      fireEvent.click(
+        await screen.findByRole("button", {
+          name: "New thread in Beta section",
+        }),
+      );
+
+      expect(inspection.navigateCalls).toContainEqual({
+        method: "toCompose",
+        options: {
+          placement: { sectionId: "sec_b", pinned: false },
+          focusPrompt: true,
+        },
+      });
+    },
+  );
 
   it("shows one divider before the built-in section visibility actions", async () => {
     renderCustomSections();
